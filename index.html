@@ -86,7 +86,7 @@
 
     <script>
       function getParam(name){ try{ const u=new URL(window.location.href); return u.searchParams.get(name); }catch(e){ return null; } }
-      let API_BASE = localStorage.getItem('API_BASE') || getParam('api_base') || 'http://127.0.0.1:5001/v1';
+      let API_BASE = localStorage.getItem('API_BASE') || getParam('api_base') || 'https://chatbotscript-production.up.railway.app/v1';
       let API_KEY  = localStorage.getItem('API_KEY')  || getParam('api_key')  || 'demo_key';
       function saveApiConfig(base, key){
         const normalized = base.replace(/\/$/, '');
