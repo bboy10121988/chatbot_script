@@ -52,6 +52,38 @@ python wsgi.py
 # 服务默认监听 http://127.0.0.1:5000
 ```
 
+## Railway 部署（后端）
+
+1. 准备
+- 将仓库推送到 GitHub（已完成）
+- 在 Railway 新建项目，连接此仓库
+
+2. 启动命令
+- 已提供 `Procfile`，使用 Gunicorn：
+  - `web: gunicorn 'wsgi:app' --workers 2 --threads 4 --bind 0.0.0.0:$PORT --timeout 60`
+
+3. 环境变量（Variables）
+- `FLASK_ENV=production`
+- `SECRET_KEY=<随机字符串>`
+- `DATABASE_URL=mysql+pymysql://<user>:<pass>@<host>:<port>/<db>`（不要使用 SQLite）
+- `CORS_ALLOWED_ORIGINS=https://<your-gh-username>.github.io,https://<your-site-domain>`
+- 可选：`REDIS_URL=redis://...`
+
+4. 初始化数据库
+- 在 MySQL 中执行 `db/schema.sql`
+- 插入租户与 API Key（bcrypt 哈希），或用你现有数据
+
+5. 验证
+- 打开 Railway 生成的域名：`/health`
+- 用 curl 或管理页验证 `/v1/*` 接口
+
+## GitHub Pages（前端/管理页）
+- 启用 Pages 指向仓库根目录
+- 在 `index.html` 中设置：
+  - `window.CHATBOT_API_BASE='https://<your-railway-host>/v1'`
+  - `window.CHATBOT_API_KEY='<your_site_api_key>'`
+- 后端 CORS 白名单加入 Pages 域名
+
 ## 准备数据与 API Key
 
 在数据库中插入一个租户、API Key（bcrypt 哈希）、商品与关键词规则。例如（MySQL）：
@@ -110,4 +142,3 @@ curl -X POST http://127.0.0.1:5000/v1/cart/items \
 - 完善规则管理后台与鉴权模型（Key 前缀/ID 以提升查询效率）
 - 引入更好的中文分词与搜索（ES/Meilisearch）
 - 增强安全（请求签名、细化 CORS 白名单、多维限流）
-
