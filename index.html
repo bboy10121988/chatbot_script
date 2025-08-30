@@ -9,6 +9,9 @@
     </style>
   </head>
   <body>
+    <div id="deploy_info" style="position:fixed;top:8px;right:12px;background:#eef2ff;color:#111827;border:1px solid #e5e7eb;padding:6px 10px;border-radius:8px;font-size:12px;z-index:10000;">
+      部署更新：<span id="deploy_ts"></span>
+    </div>
     <h1>Chatbot 管理介面</h1>
     <p>在此頁面設定「歡迎提示」、「預設回覆」，以及管理「關鍵字觸發規則」。右下角仍可透過浮窗驗證效果。</p>
 
@@ -247,8 +250,14 @@
       }
       async function testConnection(){
         const statusEl = document.getElementById('api_test_status');
-        statusEl.textContent = '測試中...';
-        const origin = new URL(API_BASE).origin;
+        const baseInput = document.getElementById('api_base');
+        const base = (baseInput && baseInput.value.trim()) ? baseInput.value.trim() : API_BASE.replace(/\/v1$/, '');
+        if(!base){ statusEl.style.color = '#dc2626'; statusEl.textContent = '請先填 API Base'; return; }
+        // normalize and persist
+        saveApiConfig(base, document.getElementById('api_key') ? document.getElementById('api_key').value.trim() : API_KEY);
+        statusEl.textContent = '測試中...'; statusEl.style.color = '#2563eb';
+        let origin;
+        try{ origin = new URL(API_BASE).origin; } catch(e){ statusEl.style.color='#dc2626'; statusEl.textContent='API Base 非法'; return; }
         let healthOK = false, settingsOK = false, settingsMsg = '';
         try{
           const h = await fetch(origin + '/health');
@@ -277,6 +286,9 @@
           </div>';
         const anchor = document.querySelector('h1');
         if(anchor && anchor.parentNode){ anchor.parentNode.insertBefore(sec, anchor.nextSibling); } else { document.body.insertBefore(sec, document.body.firstChild); }
+        // Prefill inputs immediately with current config
+        const ab = document.getElementById('api_base'); if (ab) ab.value = API_BASE.replace(/\/v1$/, '');
+        const ak = document.getElementById('api_key'); if (ak) ak.value = API_KEY;
         document.getElementById('save_api').onclick = function(){
           const base = document.getElementById('api_base').value.trim();
           const key  = document.getElementById('api_key').value.trim();
@@ -287,6 +299,14 @@
         };
         document.getElementById('test_api').onclick = testConnection;
       })();
+      // Show deploy/build time (to milliseconds) from document.lastModified
+      try{
+        const ts = new Date(document.lastModified);
+        const pad = n => n.toString().padStart(2,'0');
+        const ms = ts.getMilliseconds().toString().padStart(3,'0');
+        const local = `${ts.getFullYear()}-${pad(ts.getMonth()+1)}-${pad(ts.getDate())} ${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}.${ms}`;
+        document.getElementById('deploy_ts').textContent = local;
+      }catch(e){}
       loadEmbed();
     </script>
   </body>
