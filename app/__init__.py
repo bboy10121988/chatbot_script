@@ -3,6 +3,7 @@ from flask_cors import CORS
 
 from .config import Config
 from .extensions import db, migrate, init_redis
+from .bootstrap import bootstrap_if_needed
 
 
 def register_error_handlers(app: Flask):
@@ -73,4 +74,11 @@ def create_app(config_object: type[Config] | None = None):
     app.register_blueprint(static_bp)
 
     register_error_handlers(app)
+
+    # Finalize bootstrapping (first-run seeding when enabled)
+    try:
+        with app.app_context():
+            bootstrap_if_needed()
+    except Exception:
+        pass
     return app

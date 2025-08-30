@@ -38,3 +38,9 @@ class Config:
 
     # Dev convenience: auto create tables on startup for SQLite
     AUTO_CREATE_DB = os.getenv("AUTO_CREATE_DB", "true").lower() in ("1", "true", "yes")
+
+    # Bootstrap on first run (for production envs too, gated by flag)
+    AUTO_BOOTSTRAP = os.getenv("AUTO_BOOTSTRAP", "true").lower() in ("1", "true", "yes")
+    SITE_TENANT_NAME = os.getenv("SITE_TENANT_NAME", "demo")
+    SITE_API_KEY = os.getenv("SITE_API_KEY", "demo_key")
+    BOOTSTRAP_SAMPLE_DATA = os.getenv("BOOTSTRAP_SAMPLE_DATA", "true").lower() in ("1", "true", "yes")

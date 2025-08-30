@@ -68,10 +68,16 @@ python wsgi.py
 - `DATABASE_URL=mysql+pymysql://<user>:<pass>@<host>:<port>/<db>`（不要使用 SQLite）
 - `CORS_ALLOWED_ORIGINS=https://<your-gh-username>.github.io,https://<your-site-domain>`
 - 可选：`REDIS_URL=redis://...`
+ - 首次自动初始化（推荐保留默认即可）：
+   - `AUTO_BOOTSTRAP=true`（默认已开启：若库中无租户，自动创建 demo 租户与站点 API Key，并写入默认设置与示例数据）
+   - `SITE_TENANT_NAME=demo`
+   - `SITE_API_KEY=<你的站点API Key>`（请改成你自己的）
+   - `BOOTSTRAP_SAMPLE_DATA=true`（创建示例商品与规则）
 
 4. 初始化数据库
-- 在 MySQL 中执行 `db/schema.sql`
-- 插入租户与 API Key（bcrypt 哈希），或用你现有数据
+- 方式A：在 MySQL 中执行 `db/schema.sql`
+- 方式B：保持 `AUTO_BOOTSTRAP=true`，并设置 `SITE_API_KEY`，服务首次启动会自动建表与种子（仅在库为空时触发）
+- 方式C：手动运行脚本（本地连 Railway MySQL）：`python scripts/seed_mysql.py`
 
 5. 验证
 - 打开 Railway 生成的域名：`/health`
