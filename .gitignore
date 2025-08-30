@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Flask instance dir and local DB
+instance/
+chatbot.db
+
+# Env files
+.env
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
