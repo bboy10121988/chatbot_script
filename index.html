@@ -89,11 +89,19 @@
 
     <script>
       function getParam(name){ try{ const u=new URL(window.location.href); return u.searchParams.get(name); }catch(e){ return null; } }
-      let API_BASE = localStorage.getItem('API_BASE') || getParam('api_base') || 'https://chatbotscript-production.up.railway.app/v1';
+      const DEFAULT_API_BASE = 'https://chatbotscript-production.up.railway.app/v1';
+      let API_BASE = localStorage.getItem('API_BASE') || getParam('api_base') || DEFAULT_API_BASE;
       let API_KEY  = localStorage.getItem('API_KEY')  || getParam('api_key')  || 'demo_key';
+      function normalizeBase(base){
+        if(!base) return '';
+        let b = base.trim();
+        if(!/^https?:\/\//i.test(b)) b = 'https://' + b;
+        b = b.replace(/\/$/, '');
+        return /\/v1$/i.test(b) ? b : (b + '/v1');
+      }
       function saveApiConfig(base, key){
-        const normalized = base.replace(/\/$/, '');
-        API_BASE = /\/v1$/.test(normalized) ? normalized : (normalized + '/v1');
+        const nb = normalizeBase(base);
+        API_BASE = nb || DEFAULT_API_BASE;
         API_KEY = key;
         localStorage.setItem('API_BASE', API_BASE);
         localStorage.setItem('API_KEY', API_KEY);
@@ -244,20 +252,26 @@
           window.CHATBOT_API_BASE = API_BASE;
           window.CHATBOT_API_KEY = API_KEY;
           const old = document.getElementById('embed_script'); if (old) old.remove();
-          const origin = new URL(API_BASE).origin;
-          const s = document.createElement('script'); s.id='embed_script'; s.src = origin + '/embed.js'; document.body.appendChild(s);
-        }catch(e){ console.error('Failed to load embed.js', e); }
+          let origin;
+          try { origin = new URL(API_BASE).origin; }
+          catch(e){ API_BASE = DEFAULT_API_BASE; origin = new URL(API_BASE).origin; }
+          const s = document.createElement('script');
+          s.id='embed_script';
+          s.src = origin + '/embed.js';
+          s.onerror = function(){ const el = document.getElementById('api_test_status'); if(el){ el.style.color='#dc2626'; el.textContent='embed 載入失敗（請檢查 API Base 是否可達）'; } };
+          document.body.appendChild(s);
+        }catch(e){ console.error('Failed to load embed.js', e); const el = document.getElementById('api_test_status'); if(el){ el.style.color='#dc2626'; el.textContent='embed 載入失敗（例外）'; } }
       }
       async function testConnection(){
         const statusEl = document.getElementById('api_test_status');
         const baseInput = document.getElementById('api_base');
-        const base = (baseInput && baseInput.value.trim()) ? baseInput.value.trim() : API_BASE.replace(/\/v1$/, '');
-        if(!base){ statusEl.style.color = '#dc2626'; statusEl.textContent = '請先填 API Base'; return; }
+        let base = (baseInput && baseInput.value.trim()) ? baseInput.value.trim() : API_BASE.replace(/\/v1$/, '');
+        if(!base){ base = DEFAULT_API_BASE.replace(/\/v1$/, ''); }
         // normalize and persist
         saveApiConfig(base, document.getElementById('api_key') ? document.getElementById('api_key').value.trim() : API_KEY);
         statusEl.textContent = '測試中...'; statusEl.style.color = '#2563eb';
         let origin;
-        try{ origin = new URL(API_BASE).origin; } catch(e){ statusEl.style.color='#dc2626'; statusEl.textContent='API Base 非法'; return; }
+        try{ origin = new URL(API_BASE).origin; } catch(e){ API_BASE = DEFAULT_API_BASE; origin = new URL(API_BASE).origin; }
         let healthOK = false, settingsOK = false, settingsMsg = '';
         try{
           const h = await fetch(origin + '/health');
