@@ -85,8 +85,16 @@
     </section>
 
     <script>
-      const API_BASE = 'http://127.0.0.1:5001/v1';
-      const API_KEY = 'demo_key';
+      function getParam(name){ try{ const u=new URL(window.location.href); return u.searchParams.get(name); }catch(e){ return null; } }
+      let API_BASE = localStorage.getItem('API_BASE') || getParam('api_base') || 'http://127.0.0.1:5001/v1';
+      let API_KEY  = localStorage.getItem('API_KEY')  || getParam('api_key')  || 'demo_key';
+      function saveApiConfig(base, key){
+        const normalized = base.replace(/\/$/, '');
+        API_BASE = /\/v1$/.test(normalized) ? normalized : (normalized + '/v1');
+        API_KEY = key;
+        localStorage.setItem('API_BASE', API_BASE);
+        localStorage.setItem('API_KEY', API_KEY);
+      }
 
       async function fetchSettings(){
         const res = await fetch(API_BASE+'/settings',{headers:{'X-API-Key':API_KEY}});
@@ -95,6 +103,8 @@
         document.getElementById('default_reply_text').value = data.default_reply_text || '';
         document.getElementById('ext_api_url').value = data.external_products_api_url || '';
         document.getElementById('ext_api_key').value = data.external_products_api_key || '';
+        const ab = document.getElementById('api_base'); if (ab) ab.value = API_BASE.replace(/\/v1$/, '');
+        const ak = document.getElementById('api_key'); if (ak) ak.value = API_KEY;
       }
 
       async function saveSettings(){
@@ -224,11 +234,60 @@
       fetchRules();
     </script>
 
-    <!-- 仍可用浮窗驗證效果 -->
+    <!-- 仍可用浮窗驗證效果（改為動態注入，跟隨 API_BASE / API_KEY） -->
     <script>
-      window.CHATBOT_API_BASE = 'http://127.0.0.1:5001/v1';
-      window.CHATBOT_API_KEY = 'demo_key';
+      function loadEmbed(){
+        try{
+          window.CHATBOT_API_BASE = API_BASE;
+          window.CHATBOT_API_KEY = API_KEY;
+          const old = document.getElementById('embed_script'); if (old) old.remove();
+          const origin = new URL(API_BASE).origin;
+          const s = document.createElement('script'); s.id='embed_script'; s.src = origin + '/embed.js'; document.body.appendChild(s);
+        }catch(e){ console.error('Failed to load embed.js', e); }
+      }
+      async function testConnection(){
+        const statusEl = document.getElementById('api_test_status');
+        statusEl.textContent = '測試中...';
+        const origin = new URL(API_BASE).origin;
+        let healthOK = false, settingsOK = false, settingsMsg = '';
+        try{
+          const h = await fetch(origin + '/health');
+          healthOK = h.ok;
+        }catch(e){ healthOK = false; }
+        try{
+          const s = await fetch(API_BASE + '/settings', { headers: { 'X-API-Key': API_KEY }});
+          settingsOK = s.ok;
+          if(!s.ok){ settingsMsg = 'HTTP ' + s.status; } else { const j = await s.json(); settingsMsg = 'OK'; }
+        }catch(e){ settingsOK = false; settingsMsg = 'Network/CORS'; }
+        if(healthOK && settingsOK){ statusEl.style.color = '#059669'; statusEl.textContent = '連線成功（/health OK, /v1/settings OK）'; }
+        else { statusEl.style.color = '#dc2626'; statusEl.textContent = `連線失敗（health: ${healthOK?'OK':'NG'}, settings: ${settingsOK?'OK':'NG'} ${settingsMsg})`; }
+      }
+      (function addApiControls(){
+        const sec = document.createElement('section');
+        sec.innerHTML = '<h2>API 設定</h2>\
+          <div style="max-width:640px;display:flex;flex-direction:column;gap:8px">\
+            <label>API Base（例如：https://your-railway-host）<br/><input id="api_base" style="width:100%"/></label>\
+            <label>API Key（站點金鑰）<br/><input id="api_key" style="width:100%"/></label>\
+            <div>\
+              <button id="save_api">保存 API 設定並重新載入浮窗</button>\
+              <button id="test_api" style="margin-left:8px">測試後端連線</button>\
+              <span id="api_status" style="margin-left:8px;color:#059669"></span>\
+              <span id="api_test_status" style="margin-left:8px;color:#2563eb"></span>\
+            </div>\
+          </div>';
+        const anchor = document.querySelector('h1');
+        if(anchor && anchor.parentNode){ anchor.parentNode.insertBefore(sec, anchor.nextSibling); } else { document.body.insertBefore(sec, document.body.firstChild); }
+        document.getElementById('save_api').onclick = function(){
+          const base = document.getElementById('api_base').value.trim();
+          const key  = document.getElementById('api_key').value.trim();
+          if(!base){ alert('請填 API Base'); return; }
+          saveApiConfig(base, key);
+          loadEmbed();
+          const st = document.getElementById('api_status'); st.textContent='已保存'; setTimeout(()=>st.textContent='',1500);
+        };
+        document.getElementById('test_api').onclick = testConnection;
+      })();
+      loadEmbed();
     </script>
-    <script src="http://127.0.0.1:5001/embed.js"></script>
   </body>
   </html>
