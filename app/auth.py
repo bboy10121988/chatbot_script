@@ -4,6 +4,7 @@ import base64
 from typing import Optional
 
 from flask import request, g, current_app, abort
+from urllib.parse import urlparse
 
 from .extensions import db
 from .models import ApiKey
@@ -31,6 +32,14 @@ def cors_origin_allowed(origin: str | None) -> bool:
     if not origin:
         return False
     allowed = current_app.config.get("CORS_ALLOWED_ORIGINS") or []
+    # allow same-origin automatically
+    try:
+        host_url = request.host_url.rstrip('/')
+        host_origin = f"{urlparse(host_url).scheme}://{urlparse(host_url).netloc}"
+        if origin == host_origin:
+            return True
+    except Exception:
+        pass
     return origin in allowed
 
 

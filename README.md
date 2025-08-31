@@ -52,41 +52,50 @@ python wsgi.py
 # 服务默认监听 http://127.0.0.1:5000
 ```
 
-## Railway 部署（后端）
+## Render + Supabase 部署（推荐）
 
-1. 准备
-- 将仓库推送到 GitHub（已完成）
-- 在 Railway 新建项目，连接此仓库
+1) Supabase（PostgreSQL）
+- 创建项目 → 进入 Project Settings → Database → 复制 Connection string（URI）
+- 将前缀改成 SQLAlchemy 支持的：`postgresql+psycopg2://...`
 
-2. 启动命令
-- 已提供 `Procfile`，使用 Gunicorn：
-  - `web: gunicorn 'wsgi:app' --workers 2 --threads 4 --bind 0.0.0.0:$PORT --timeout 60`
+2) Render（后端 API）
+- 连接本仓库，创建 Web Service
+- Build: `pip install -r requirements.txt`
+- Start: `gunicorn 'wsgi:app' --workers 2 --threads 4 --bind 0.0.0.0:$PORT --timeout 60`
+- Health Check Path: `/health`
+- 环境变量：
+  - `FLASK_ENV=production`
+  - `SECRET_KEY=<随机字符串>`
+  - `DATABASE_URL=postgresql+psycopg2://<user>:<pass>@<host>:<port>/<db>`（来自 Supabase）
+  - `CORS_ALLOWED_ORIGINS=https://<your-gh-username>.github.io`
+  - `AUTO_BOOTSTRAP=true`
+  - `SITE_TENANT_NAME=demo`
+  - `SITE_API_KEY=<你的站点API Key>`
+  - `BOOTSTRAP_SAMPLE_DATA=true`
 
-3. 环境变量（Variables）
-- `FLASK_ENV=production`
-- `SECRET_KEY=<随机字符串>`
-- `DATABASE_URL=mysql+pymysql://<user>:<pass>@<host>:<port>/<db>`（不要使用 SQLite）
-- `CORS_ALLOWED_ORIGINS=https://<your-gh-username>.github.io,https://<your-site-domain>`
-- 可选：`REDIS_URL=redis://...`
- - 首次自动初始化（推荐保留默认即可）：
-   - `AUTO_BOOTSTRAP=true`（默认已开启：若库中无租户，自动创建 demo 租户与站点 API Key，并写入默认设置与示例数据）
-   - `SITE_TENANT_NAME=demo`
-   - `SITE_API_KEY=<你的站点API Key>`（请改成你自己的）
-   - `BOOTSTRAP_SAMPLE_DATA=true`（创建示例商品与规则）
+3) GitHub Pages（管理页/嵌入测试）
+- 打开 `index.html` 所在仓库的 GitHub Pages
+- 访问 `https://<your-gh-username>.github.io/<repo>/`
+- 顶部“API 设置”：
+  - API Base：填 `https://<你的 Render 服务域名>`（无需 `/v1`，页面会自动补）
+  - API Key：填上面 `SITE_API_KEY`
+  - 点击“测试后端连线”，显示 `/health OK` 与 `/v1/settings OK` 即通
 
-4. 初始化数据库
-- 方式A：在 MySQL 中执行 `db/schema.sql`
-- 方式B：保持 `AUTO_BOOTSTRAP=true`，并设置 `SITE_API_KEY`，服务首次启动会自动建表与种子（仅在库为空时触发）
-- 方式C：手动运行脚本（本地连 Railway MySQL）：`python scripts/seed_mysql.py`
+4) 嵌入到真实站点
+```
+<script>
+  window.CHATBOT_API_BASE = 'https://<your-render-domain>/v1';
+  window.CHATBOT_API_KEY = '<SITE_API_KEY>';
+</script>
+<script src="https://<your-render-domain>/embed.js"></script>
+```
 
-5. 验证
-- 打开 Railway 生成的域名：`/health`
-- 用 curl 或管理页验证 `/v1/*` 接口
+---
 
 ## GitHub Pages（前端/管理页）
 - 启用 Pages 指向仓库根目录
 - 在 `index.html` 中设置：
-  - `window.CHATBOT_API_BASE='https://<your-railway-host>/v1'`
+  - `window.CHATBOT_API_BASE='https://<your-render-domain>/v1'`
   - `window.CHATBOT_API_KEY='<your_site_api_key>'`
 - 后端 CORS 白名单加入 Pages 域名
 
