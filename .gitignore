@@ -9,9 +9,9 @@ chatbot.db
 
 # Env files
 .env
+.env.railway
 
 # OS/editor
 .DS_Store
 .idea/
 .vscode/
-

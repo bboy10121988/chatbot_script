@@ -54,16 +54,36 @@
       welcomed = true;
     }
   }
+  // suggestion chips
+  function renderChips(list){
+    if (!Array.isArray(list) || !list.length) return;
+    var bar = document.createElement('div');
+    bar.style='display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px dashed #e5e7eb;background:#fafafa;';
+    list.slice(0,6).forEach(function(q){
+      var chip=document.createElement('button'); chip.textContent=q; chip.style='border:1px solid #e5e7eb;background:#fff;color:#111827;border-radius:999px;padding:6px 10px;cursor:pointer;font-size:12px;';
+      chip.onclick=function(){ document.getElementById('inp').value=q; document.getElementById('send').click(); };
+      bar.appendChild(chip);
+    });
+    panel.querySelector('#chat').appendChild(bar);
+  }
   btn.onclick = function(){
     var visible = panel.style.display !== 'none';
     panel.style.display = visible ? 'none' : 'block';
-    if(!visible){ ensureWelcome(); }
+    if(!visible){ ensureWelcome().then(function(){
+      // load suggestions from settings
+      fetch(API_BASE.replace(/\/$/, '') + '/settings', { headers: { 'X-API-Key': API_KEY }}).then(function(r){ return r.json(); }).then(function(d){
+        if (d && Array.isArray(d.suggested_queries)) renderChips(d.suggested_queries);
+      }).catch(function(){});
+    }); }
   };
   document.getElementById('send').onclick = async function(){
     var inp = document.getElementById('inp');
     var val = (inp.value||'').trim(); if(!val) return; addMsg('user', val); inp.value='';
+    // typing indicator
+    var typingEl = bubble('assistant','正在為你查找…'); typingEl.id='typing_ind'; msgs().appendChild(typingEl); msgs().scrollTop=msgs().scrollHeight;
     var res = await fetch(API_BASE + '/chat/message', { method:'POST', headers:{ 'Content-Type':'application/json','X-API-Key':API_KEY }, body: JSON.stringify({conversation_id:conversationId, message:val, locale: navigator.language}) });
     var data = await res.json(); if(data.conversation_id && data.conversation_id!==conversationId){ conversationId = data.conversation_id; localStorage.setItem('cb_conversation_id', conversationId); }
+    var tEl=document.getElementById('typing_ind'); if(tEl){ tEl.remove(); }
     (data.messages||[]).forEach(function(m){ if(m.type==='text') addMsg('assistant', m.content); });
     (data.products||[]).forEach(function(p){ var c=document.createElement('div'); c.style='align-self:flex-start;border:1px solid #eee;padding:8px;border-radius:8px;margin:2px 0;display:flex;gap:8px;align-items:center;font-size:13px;background:#fff;'; c.innerHTML='<img src="'+(p.image_url||'')+'" style="width:48px;height:48px;object-fit:cover;border-radius:6px"/>\
         <div style="flex:1">'+p.name+'<div style="color:#6b7280">￥'+(((p.price||{}).value)||'')+'</div></div>\

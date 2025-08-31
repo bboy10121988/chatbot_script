@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request, g
 from ..auth import require_api_key
 from ..extensions import db
 from ..models import KeywordRule, Setting, Product
+from ..cache import get as cache_get, set as cache_set, delete as cache_delete
 from decimal import Decimal
 import json
 import typing as t
@@ -88,18 +89,23 @@ def serialize_rule(r: KeywordRule):
 
 
 # Settings (welcome/default replies)
-ALLOWED_SETTING_KEYS = {"welcome_text", "default_reply_text", "external_products_api_url", "external_products_api_key"}
+ALLOWED_SETTING_KEYS = {"welcome_text", "default_reply_text", "external_products_api_url", "external_products_api_key", "suggested_queries"}
 
 
 @bp.get("/settings")
 def get_settings():
     try:
+        cache_key = f"{g.tenant_id}:settings"
+        cached = cache_get("settings", cache_key)
+        if cached is not None:
+            return jsonify(cached)
         rows = (
             db.session.query(Setting)
             .filter(Setting.tenant_id == g.tenant_id, Setting.key.in_(ALLOWED_SETTING_KEYS))
             .all()
         )
         res = {s.key: s.value for s in rows}
+        cache_set("settings", cache_key, res, ttl_seconds=60)
         return jsonify(res)
     except Exception:
         # If the table is missing (e.g., first boot), attempt to create it then return defaults
@@ -152,6 +158,8 @@ def update_settings():
         except Exception as e:
             db.session.rollback()
             return jsonify({"error": {"code": "server_error", "message": str(e)}}), 500
+    # invalidate cache
+    cache_delete("settings", f"{g.tenant_id}:settings")
     return jsonify(updated)
 
 
@@ -306,4 +314,113 @@ def admin_import_products():
         p.tags = tags if isinstance(tags, list) else []
         db.session.add(p)
     db.session.commit()
+    return jsonify({"ok": True, "created": created, "updated": updated})
+
+
+@bp.get("/admin/products/export")
+def admin_export_products():
+    from io import StringIO
+    import csv
+    items = (
+        db.session.query(Product)
+        .filter(Product.tenant_id == g.tenant_id)
+        .order_by(Product.id.asc())
+        .all()
+    )
+    out = StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["id","sku","name","description","price","currency","image_url","stock","is_active","tags"])
+    for p in items:
+        writer.writerow([p.id, p.sku or '', p.name, p.description or '', float(p.price), p.currency, p.image_url or '', p.stock, 1 if p.is_active else 0, ','.join(p.tags or [])])
+    return (out.getvalue(), 200, {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=products.csv"})
+
+
+@bp.post("/admin/products/import-csv")
+def admin_import_products_csv():
+    from io import StringIO
+    import csv
+    raw = request.get_data(as_text=True)
+    if not raw:
+        return jsonify({"error": {"code": "bad_request", "message": "empty body"}}), 400
+    reader = csv.DictReader(StringIO(raw))
+    created = updated = 0
+    for row in reader:
+        sku = (row.get('sku') or '').strip() or None
+        name = (row.get('name') or '').strip()
+        if not (sku or name):
+            continue
+        q = db.session.query(Product).filter(Product.tenant_id == g.tenant_id)
+        if sku: q = q.filter(Product.sku == sku)
+        else: q = q.filter(Product.name == name)
+        p = q.first()
+        if not p:
+            p = Product(tenant_id=g.tenant_id)
+            created += 1
+        else:
+            updated += 1
+        p.sku = sku
+        p.name = name or p.name
+        p.description = row.get('description')
+        try: p.price = Decimal(str(row.get('price') or 0))
+        except Exception: p.price = Decimal('0')
+        p.currency = row.get('currency') or 'CNY'
+        p.image_url = row.get('image_url')
+        try: p.stock = int(row.get('stock') or 0)
+        except Exception: p.stock = 0
+        p.is_active = str(row.get('is_active') or '1') in ('1','true','True')
+        tags_raw = row.get('tags')
+        if tags_raw: p.tags = [t.strip() for t in tags_raw.split(',') if t.strip()]
+        db.session.add(p)
+    db.session.commit()
+    return jsonify({"ok": True, "created": created, "updated": updated})
+
+
+@bp.get("/keyword-rules/export")
+def export_rules():
+    from io import StringIO
+    import csv
+    items = (
+        db.session.query(KeywordRule)
+        .filter(KeywordRule.tenant_id == g.tenant_id)
+        .order_by(KeywordRule.priority.desc(), KeywordRule.id.asc())
+        .all()
+    )
+    out = StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["id","trigger_text","match_type","priority","product_ids","response_text","is_active"]) 
+    for r in items:
+        writer.writerow([r.id, r.trigger_text, r.match_type, r.priority, ','.join([str(x) for x in (r.product_ids or [])]), r.response_text or '', 1 if r.is_active else 0])
+    return (out.getvalue(), 200, {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=keyword_rules.csv"})
+
+
+@bp.post("/keyword-rules/import-csv")
+def import_rules_csv():
+    from io import StringIO
+    import csv
+    raw = request.get_data(as_text=True)
+    if not raw:
+        return jsonify({"error": {"code": "bad_request", "message": "empty body"}}), 400
+    reader = csv.DictReader(StringIO(raw))
+    created = updated = 0
+    for row in reader:
+        trig = (row.get('trigger_text') or '').strip()
+        if not trig:
+            continue
+        r = db.session.query(KeywordRule).filter(KeywordRule.tenant_id == g.tenant_id, KeywordRule.trigger_text == trig).first()
+        if not r:
+            r = KeywordRule(tenant_id=g.tenant_id)
+            created += 1
+        else:
+            updated += 1
+        r.trigger_text = trig
+        r.match_type = (row.get('match_type') or 'contains')
+        try: r.priority = int(row.get('priority') or 0)
+        except Exception: r.priority = 0
+        pids = (row.get('product_ids') or '').strip()
+        r.product_ids = [int(x) for x in pids.split(',') if x.strip().isdigit()] if pids else []
+        r.response_text = row.get('response_text') or None
+        r.is_active = str(row.get('is_active') or '1') in ('1','true','True')
+        db.session.add(r)
+    db.session.commit()
+    # invalidate settings cache is unnecessary here
     return jsonify({"ok": True, "created": created, "updated": updated})

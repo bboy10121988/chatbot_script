@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import List, Tuple
+from difflib import SequenceMatcher
 
 from sqlalchemy import or_, select
 
@@ -59,6 +60,24 @@ def match_rules(tenant_id: int, text: str) -> List[KeywordRule]:
     return matched
 
 
+def fuzzy_rules(tenant_id: int, text: str, threshold: float = 0.72) -> List[KeywordRule]:
+    rules = (
+        db.session.query(KeywordRule)
+        .filter(KeywordRule.tenant_id == tenant_id, KeywordRule.is_active.is_(True))
+        .all()
+    )
+    cand: List[Tuple[float, KeywordRule]] = []
+    for r in rules:
+        trig = (r.trigger_text or "").lower()
+        if not trig:
+            continue
+        score = SequenceMatcher(None, text, trig).ratio()
+        if score >= threshold:
+            cand.append((score, r))
+    cand.sort(key=lambda x: (x[0], x[1].priority), reverse=True)
+    return [r for _, r in cand[:5]]
+
+
 def fetch_products_by_ids(tenant_id: int, ids: List[int], limit: int = 5) -> List[Product]:
     if not ids:
         return []
@@ -91,6 +110,8 @@ def recommend(tenant_id: int, text: str, limit: int = 5) -> Tuple[str | None, Li
     text_norm = normalize(text)
     terms = expand_terms(tenant_id, text_norm)
     rules = match_rules(tenant_id, text_norm)
+    if not rules:
+        rules = fuzzy_rules(tenant_id, text_norm)
 
     response_text = None
     products: List[Product] = []
@@ -116,4 +137,3 @@ def recommend(tenant_id: int, text: str, limit: int = 5) -> Tuple[str | None, Li
     if not products:
         products = fallback_search(tenant_id, terms, limit=limit)
     return response_text, products
-

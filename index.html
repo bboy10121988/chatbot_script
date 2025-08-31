@@ -24,6 +24,9 @@
         <label>預設回覆（無命中或兜底時）<br/>
           <textarea id="default_reply_text" rows="2" style="width:100%"></textarea>
         </label>
+        <label>建議關鍵字（逗號分隔，將顯示為快速按鈕）<br/>
+          <input id="suggested_queries" placeholder="例如：藍牙耳機, 充電器, 降噪耳機" style="width:100%"/>
+        </label>
         <div>
           <button id="save_settings">保存設定</button>
           <span id="settings_status" style="margin-left:8px;color:#059669"></span>
@@ -114,6 +117,11 @@
         document.getElementById('default_reply_text').value = data.default_reply_text || '';
         document.getElementById('ext_api_url').value = data.external_products_api_url || '';
         document.getElementById('ext_api_key').value = data.external_products_api_key || '';
+        // Suggested queries (JSON array)
+        if (data.suggested_queries && Array.isArray(data.suggested_queries)) {
+          // show as comma string for quick edit
+          let el = document.getElementById('suggested_queries'); if (el) el.value = data.suggested_queries.join(',');
+        }
         const ab = document.getElementById('api_base'); if (ab) ab.value = API_BASE.replace(/\/v1$/, '');
         const ak = document.getElementById('api_key'); if (ak) ak.value = API_KEY;
       }
@@ -124,6 +132,7 @@
           default_reply_text: document.getElementById('default_reply_text').value,
           external_products_api_url: document.getElementById('ext_api_url').value,
           external_products_api_key: document.getElementById('ext_api_key').value,
+          suggested_queries: (function(){ var v=document.getElementById('suggested_queries').value.trim(); if(!v) return []; return v.split(',').map(x=>x.trim()).filter(Boolean); })(),
         };
         const res = await fetch(API_BASE+'/settings',{method:'PUT',headers:{'Content-Type':'application/json','X-API-Key':API_KEY},body:JSON.stringify(body)});
         if(res.ok){ document.getElementById('settings_status').textContent='已保存'; setTimeout(()=>document.getElementById('settings_status').textContent='',1500); }
